@@ -66,7 +66,7 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
         match socket.recv(&mut buf) {
             Ok(n) => {
                 // SAFETY: We trust recv to have initialized the first n bytes.
-                let bytes = unsafe {
+                let _bytes: &[u8] = unsafe {
                     std::slice::from_raw_parts(buf.as_ptr() as *const u8, n)
                 };
                 let elapsed = start.elapsed();
@@ -189,28 +189,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut i = 0;
     while i < args.len() {
         let arg = &args[i];
-        if arg.starts_with("/u") {
+        match arg.as_str() {
+            a if a.starts_with("/u") => {
             url = Some(args[i+1].clone());
             i += 1;
-        } else if arg.starts_with("/o") {
+            }
+            a if a.starts_with("/o") => {
             out = Some(args[i+1].clone());
             i += 1;
-        } else if arg.starts_with("/s") {
+            }
+            a if a.starts_with("/s") => {
             save_db = Some(args[i+1].clone());
             i += 1;
-        } else if arg.starts_with("/l") {
+            }
+            a if a.starts_with("/l") => {
             load_db = Some(args[i+1].clone());
             i += 1;
-        } else if arg.starts_with("/t") {
+            }
+            a if a.starts_with("/t") => {
             take_file = Some(args[i+1].clone());
             i += 1;
-        } else if arg.starts_with("/p:") {
-            let parts: Vec<&str> = arg.split(':').collect();
+            }
+            a if a.starts_with("/p:") => {
+            let parts: Vec<&str> = a.split(':').collect();
             ping_count = Some(parts[1].parse().unwrap_or(4));
             if i+1 < args.len() {
                 ping_host = Some(args[i+1].clone());
                 i += 1;
             }
+            }
+            _ => {}
         }
         i += 1;
     }
