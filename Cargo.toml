@@ -1,0 +1,24 @@
+[package]
+name = "catch"
+version = "0.1.0"
+edition = "2024"
+authors = ["Your Name <you@example.com>"]
+description = "A downloader + pinger with secure DLB/DQB storage"
+license = "MIT"
+
+[dependencies]
+reqwest = { version = "0.11", features = ["blocking", "json"] } # HTTP(S) download
+clap = { version = "4.5", features = ["derive"] }               # CLI parsing
+flate2 = "1.0"                                                  # compression
+rand = "0.8"                                                    # random salts, IDs
+chrono = "0.4"                                                  # timestamps
+serde = { version = "1.0", features = ["derive"] }              # for metadata
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["full"] }
+socket2 = "0.5"
+
+# optional: for secure hashing
+sha2 = "0.10"
+
+[dev-dependencies]
+assert_cmd = "2.0"
