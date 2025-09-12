@@ -2,9 +2,10 @@
 name = "catch"
 version = "0.1.0"
 edition = "2024"
-authors = ["Your Name <you@example.com>"]
+authors = ["Ariel Zvinowanda <taperazvi@gmail.com>"]
 description = "A downloader + pinger with secure DLB/DQB storage"
 license = "MIT"
+
 
 [dependencies]
 reqwest = { version = "0.11", features = ["blocking", "json"] } # HTTP(S) download
