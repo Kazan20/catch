@@ -1,11 +1,11 @@
+use reqwest;
+use socket2::{Domain, Protocol, Socket, Type};
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{Write, BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
-use socket2::{Protocol, Socket, Domain, Type};
 use tokio::io;
-use reqwest;
 
 // ---------- Argument Parsing ----------
 fn parse_args() -> Vec<String> {
@@ -66,9 +66,8 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
         match socket.recv(&mut buf) {
             Ok(n) => {
                 // SAFETY: We trust recv to have initialized the first n bytes.
-                let _bytes: &[u8] = unsafe {
-                    std::slice::from_raw_parts(buf.as_ptr() as *const u8, n)
-                };
+                let _bytes: &[u8] =
+                    unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, n) };
                 let elapsed = start.elapsed();
                 received += 1;
                 times.push(elapsed);
@@ -81,15 +80,23 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
     }
 
     println!("\nPing statistics for {}:", addr);
-    println!("    Packets: Sent = {}, Received = {}, Lost = {} ({}% loss)",
-        count, received, count - received, ((count - received) as f64 / count as f64 * 100.0) as u32);
+    println!(
+        "    Packets: Sent = {}, Received = {}, Lost = {} ({}% loss)",
+        count,
+        received,
+        count - received,
+        ((count - received) as f64 / count as f64 * 100.0) as u32
+    );
 
     if !times.is_empty() {
         let min = times.iter().min().unwrap();
         let max = times.iter().max().unwrap();
         let avg = times.iter().sum::<Duration>() / times.len() as u32;
         println!("Approximate round trip times in milli-seconds:");
-        println!("    Minimum = {:?}, Maximum = {:?}, Average = {:?}", min, max, avg);
+        println!(
+            "    Minimum = {:?}, Maximum = {:?}, Average = {:?}",
+            min, max, avg
+        );
     }
 
     Ok(())
@@ -102,9 +109,30 @@ fn save_to_db(dbfile: &str, filename: &str, data: &[u8], quantum: bool) -> std::
         writeln!(file, "###ENTRY###")?;
         writeln!(file, "NAME:{}", filename)?;
         writeln!(file, "SIZE:{}", data.len())?;
-        writeln!(file, "[DEC] {}", data.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(" "))?;
-        writeln!(file, "[OCT] {}", data.iter().map(|b| format!("{:o}", b)).collect::<Vec<_>>().join(" "))?;
-        writeln!(file, "[HEX] {}", data.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "))?;
+        writeln!(
+            file,
+            "[DEC] {}",
+            data.iter()
+                .map(|b| b.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )?;
+        writeln!(
+            file,
+            "[OCT] {}",
+            data.iter()
+                .map(|b| format!("{:o}", b))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )?;
+        writeln!(
+            file,
+            "[HEX] {}",
+            data.iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )?;
         writeln!(file, "###END###")?;
     } else {
         writeln!(file, "---ENTRY---")?;
@@ -162,7 +190,10 @@ fn load_from_db(dbfile: &str, target: &str, out: &str) -> std::io::Result<()> {
             inside = false;
         }
     }
-    Err(std::io::Error::new(std::io::ErrorKind::NotFound, "File not found in DB"))
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "File not found in DB",
+    ))
 }
 
 // ---------- Main ----------
@@ -171,6 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = parse_args();
 
     if args.is_empty() {
+        println!("Catch | made by Ariel Zvinowanda in 5B");
         println!("Usage:");
         println!("  catch /u <url> /o <file> [/s <dbfile.dlb|.dqb>]");
         println!("  catch /p:<count> <host>");
@@ -191,32 +223,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let arg = &args[i];
         match arg.as_str() {
             a if a.starts_with("/u") => {
-            url = Some(args[i+1].clone());
-            i += 1;
-            }
-            a if a.starts_with("/o") => {
-            out = Some(args[i+1].clone());
-            i += 1;
-            }
-            a if a.starts_with("/s") => {
-            save_db = Some(args[i+1].clone());
-            i += 1;
-            }
-            a if a.starts_with("/l") => {
-            load_db = Some(args[i+1].clone());
-            i += 1;
-            }
-            a if a.starts_with("/t") => {
-            take_file = Some(args[i+1].clone());
-            i += 1;
-            }
-            a if a.starts_with("/p:") => {
-            let parts: Vec<&str> = a.split(':').collect();
-            ping_count = Some(parts[1].parse().unwrap_or(4));
-            if i+1 < args.len() {
-                ping_host = Some(args[i+1].clone());
+                url = Some(args[i + 1].clone());
                 i += 1;
             }
+            a if a.starts_with("/o") => {
+                out = Some(args[i + 1].clone());
+                i += 1;
+            }
+            a if a.starts_with("/s") => {
+                save_db = Some(args[i + 1].clone());
+                i += 1;
+            }
+            a if a.starts_with("/l") => {
+                load_db = Some(args[i + 1].clone());
+                i += 1;
+            }
+            a if a.starts_with("/t") => {
+                take_file = Some(args[i + 1].clone());
+                i += 1;
+            }
+            a if a.starts_with("/p:") => {
+                let parts: Vec<&str> = a.split(':').collect();
+                ping_count = Some(parts[1].parse().unwrap_or(4));
+                if i + 1 < args.len() {
+                    ping_host = Some(args[i + 1].clone());
+                    i += 1;
+                }
             }
             _ => {}
         }
@@ -252,3 +284,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
