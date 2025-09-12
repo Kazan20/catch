@@ -5,7 +5,7 @@ edition = "2024"
 authors = ["Ariel Zvinowanda <taperazvi@gmail.com>"]
 description = "A downloader + pinger with secure DLB/DQB storage"
 license = "MIT"
-
+repository = "https://github.com/Kazan20/catch"
 
 [dependencies]
 reqwest = { version = "0.11", features = ["blocking", "json"] } # HTTP(S) download
