@@ -1,11 +1,11 @@
-use reqwest;
-use socket2::{Domain, Protocol, Socket, Type};
 use std::env;
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
+use socket2::{Domain, Protocol, Socket, Type};
 use tokio::io;
+use std::fs::File;
+use std::io::Write;
+use calcbits::{download_with_progress, save_to_db, load_from_db};
 
 // ---------- Argument Parsing ----------
 fn parse_args() -> Vec<String> {
@@ -46,7 +46,7 @@ fn build_icmp_packet(id: u16, seq: u16) -> Vec<u8> {
     packet
 }
 
-// ---------- Pinger with Stats ----------
+// ---------- Pinger ----------
 fn ping(host: &str, count: u16) -> io::Result<()> {
     let addr: Ipv4Addr = host.parse().expect("Invalid IP address");
     let socket = Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::ICMPV4))?;
@@ -65,17 +65,13 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
         let mut buf = [MaybeUninit::<u8>::uninit(); 1024];
         match socket.recv(&mut buf) {
             Ok(n) => {
-                // SAFETY: We trust recv to have initialized the first n bytes.
-                let _bytes: &[u8] =
-                    unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, n) };
+                let _bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, n) };
                 let elapsed = start.elapsed();
                 received += 1;
                 times.push(elapsed);
                 println!("Reply from {}: seq={} time={:?}", addr, seq, elapsed);
             }
-            Err(_) => {
-                println!("Request timeout for seq={}", seq);
-            }
+            Err(_) => println!("Request timeout for seq={}", seq),
         }
     }
 
@@ -92,9 +88,8 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
         let min = times.iter().min().unwrap();
         let max = times.iter().max().unwrap();
         let avg = times.iter().sum::<Duration>() / times.len() as u32;
-        println!("Approximate round trip times in milli-seconds:");
         println!(
-            "    Minimum = {:?}, Maximum = {:?}, Average = {:?}",
+            "Approximate round trip times in milli-seconds:\n    Minimum = {:?}, Maximum = {:?}, Average = {:?}",
             min, max, avg
         );
     }
@@ -102,103 +97,9 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
     Ok(())
 }
 
-// ---------- Database Save ----------
-fn save_to_db(dbfile: &str, filename: &str, data: &[u8], quantum: bool) -> std::io::Result<()> {
-    let mut file = OpenOptions::new().create(true).append(true).open(dbfile)?;
-    if quantum {
-        writeln!(file, "###ENTRY###")?;
-        writeln!(file, "NAME:{}", filename)?;
-        writeln!(file, "SIZE:{}", data.len())?;
-        writeln!(
-            file,
-            "[DEC] {}",
-            data.iter()
-                .map(|b| b.to_string())
-                .collect::<Vec<_>>()
-                .join(" ")
-        )?;
-        writeln!(
-            file,
-            "[OCT] {}",
-            data.iter()
-                .map(|b| format!("{:o}", b))
-                .collect::<Vec<_>>()
-                .join(" ")
-        )?;
-        writeln!(
-            file,
-            "[HEX] {}",
-            data.iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<_>>()
-                .join(" ")
-        )?;
-        writeln!(file, "###END###")?;
-    } else {
-        writeln!(file, "---ENTRY---")?;
-        writeln!(file, "NAME:{}", filename)?;
-        writeln!(file, "SIZE:{}", data.len())?;
-        write!(file, "DATA: ")?;
-        for (i, b) in data.iter().enumerate() {
-            write!(file, "{:02X} ", b)?;
-            if (i + 1) % 16 == 0 {
-                writeln!(file)?;
-            }
-        }
-        writeln!(file, "\n---END---")?;
-    }
-    Ok(())
-}
-
-// ---------- Database Load ----------
-fn load_from_db(dbfile: &str, target: &str, out: &str) -> std::io::Result<()> {
-    let f = File::open(dbfile)?;
-    let reader = BufReader::new(f);
-    let mut inside = false;
-    let mut collected: Vec<u8> = Vec::new();
-    let mut current_name = String::new();
-
-    for line in reader.lines() {
-        let l = line?;
-        if l.contains("ENTRY") {
-            inside = true;
-            collected.clear();
-            current_name.clear();
-        } else if l.starts_with("NAME:") {
-            current_name = l.split_once(':').unwrap().1.to_string();
-        } else if l.starts_with("DATA:") {
-            let parts = l["DATA:".len()..].trim().split_whitespace();
-            for p in parts {
-                if let Ok(b) = u8::from_str_radix(p, 16) {
-                    collected.push(b);
-                }
-            }
-        } else if l.starts_with("[HEX]") {
-            let parts = l[5..].trim().split_whitespace();
-            for p in parts {
-                if let Ok(b) = u8::from_str_radix(p, 16) {
-                    collected.push(b);
-                }
-            }
-        } else if l.contains("END") && inside {
-            if current_name == target {
-                let mut outf = File::create(out)?;
-                outf.write_all(&collected)?;
-                println!("Extracted {} -> {}", current_name, out);
-                return Ok(());
-            }
-            inside = false;
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "File not found in DB",
-    ))
-}
-
 // ---------- Main ----------
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = parse_args();
 
     if args.is_empty() {
@@ -222,47 +123,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while i < args.len() {
         let arg = &args[i];
         match arg.as_str() {
-            a if a.starts_with("/u") => {
-                url = Some(args[i + 1].clone());
-                i += 1;
-            }
-            a if a.starts_with("/o") => {
-                out = Some(args[i + 1].clone());
-                i += 1;
-            }
-            a if a.starts_with("/s") => {
-                save_db = Some(args[i + 1].clone());
-                i += 1;
-            }
-            a if a.starts_with("/l") => {
-                load_db = Some(args[i + 1].clone());
-                i += 1;
-            }
-            a if a.starts_with("/t") => {
-                take_file = Some(args[i + 1].clone());
-                i += 1;
-            }
+            a if a.starts_with("/u") => { url = Some(args[i + 1].clone()); i += 1; }
+            a if a.starts_with("/o") => { out = Some(args[i + 1].clone()); i += 1; }
+            a if a.starts_with("/s") => { save_db = Some(args[i + 1].clone()); i += 1; }
+            a if a.starts_with("/l") => { load_db = Some(args[i + 1].clone()); i += 1; }
+            a if a.starts_with("/t") => { take_file = Some(args[i + 1].clone()); i += 1; }
             a if a.starts_with("/p:") => {
                 let parts: Vec<&str> = a.split(':').collect();
                 ping_count = Some(parts[1].parse().unwrap_or(4));
-                if i + 1 < args.len() {
-                    ping_host = Some(args[i + 1].clone());
-                    i += 1;
-                }
+                if i + 1 < args.len() { ping_host = Some(args[i + 1].clone()); i += 1; }
             }
             _ => {}
         }
         i += 1;
     }
 
-    // --- Downloader + save to DB ---
+    // --- Downloader + save to DB using calcbits ---
     if let Some(u) = url {
         let outfile = out.clone().unwrap_or("output.html".into());
         println!("Downloading {} -> {}", u, outfile);
-        let resp = reqwest::get(&u).await?.bytes().await?;
-        let data = resp.to_vec();
-        let mut file = File::create(&outfile)?;
-        file.write_all(&data)?;
+        let data = download_with_progress(&u).await?;
+        File::create(&outfile)?.write_all(&data)?;
         println!("Download complete.");
 
         if let Some(db) = save_db {
@@ -272,16 +153,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // --- Load from DB ---
+    // --- Load from DB using calcbits ---
     if let (Some(db), Some(t), Some(o)) = (load_db, take_file, out) {
         load_from_db(&db, &t, &o)?;
     }
 
     // --- Ping ---
     if let (Some(c), Some(h)) = (ping_count, ping_host) {
-        ping(&h, c).unwrap();
+        ping(&h, c)?;
     }
 
     Ok(())
 }
-
