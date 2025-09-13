@@ -147,26 +147,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // --- Downloader + save to DB using calcbits progress bar ---
     if let Some(u) = url {
-        let outfile = out.clone().unwrap_or("output.html".into());
-        println!("Downloading {} -> {}", u, outfile);
+    let outfile = out.clone().unwrap_or("output.html".into());
+    println!("Downloading {} -> {}", u, outfile);
 
-        let data = download_with_progress(&u).await?;
+    // Use calcbits' async download with progress
+    let data = download_with_progress(&u).await?;
+    File::create(&outfile)?.write_all(&data)?;
+    println!("Download complete.");
 
-        // Write to file with calcbits progress bar
-        let pb = create_progress_bar(data.len() as u64, "Writing file");
-        let mut f = File::create(&outfile)?;
-        for chunk in data.chunks(4096) {
-            f.write_all(chunk)?;
-            pb.inc(chunk.len() as u64);
-        }
-        pb.finish_with_message("File saved");
-
-        if let Some(db) = save_db {
-            let quantum = db.ends_with(".dqb");
-            save_to_db(&db, &outfile, &data, quantum)?;
-            println!("Stored {} into {}", outfile, db);
-        }
+    // Optional: save to DB
+    if let Some(db) = save_db {
+        let quantum = db.ends_with(".dqb");
+        save_to_db(&db, &outfile, &data, quantum)?;
+        println!("Stored {} into {}", outfile, db);
     }
+}
+
 
     // --- Load from DB using calcbits progress bar ---
     if let (Some(db), Some(t), Some(o)) = (load_db, take_file, out) {
