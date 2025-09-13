@@ -5,7 +5,7 @@ use socket2::{Domain, Protocol, Socket, Type};
 use tokio::io;
 use std::fs::File;
 use std::io::Write;
-use calcbits::{download_with_progress, save_to_db, load_from_db};
+use calcbits::{download_with_progress, save_to_db, load_from_db, create_progress_bar};
 
 // ---------- Argument Parsing ----------
 fn parse_args() -> Vec<String> {
@@ -56,6 +56,9 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
     let mut received = 0;
     let mut times: Vec<Duration> = Vec::new();
 
+    // Use progress bar from calcbits
+    let pb = create_progress_bar(count as u64, "Pinging");
+
     for seq in 0..count {
         let packet = build_icmp_packet(1, seq);
         let start = Instant::now();
@@ -73,7 +76,11 @@ fn ping(host: &str, count: u16) -> io::Result<()> {
             }
             Err(_) => println!("Request timeout for seq={}", seq),
         }
+
+        pb.inc(1);
     }
+
+    pb.finish_with_message("Ping complete");
 
     println!("\nPing statistics for {}:", addr);
     println!(
@@ -138,13 +145,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         i += 1;
     }
 
-    // --- Downloader + save to DB using calcbits ---
+    // --- Downloader + save to DB using calcbits progress bar ---
     if let Some(u) = url {
         let outfile = out.clone().unwrap_or("output.html".into());
         println!("Downloading {} -> {}", u, outfile);
+
         let data = download_with_progress(&u).await?;
-        File::create(&outfile)?.write_all(&data)?;
-        println!("Download complete.");
+
+        // Write to file with calcbits progress bar
+        let pb = create_progress_bar(data.len() as u64, "Writing file");
+        let mut f = File::create(&outfile)?;
+        for chunk in data.chunks(4096) {
+            f.write_all(chunk)?;
+            pb.inc(chunk.len() as u64);
+        }
+        pb.finish_with_message("File saved");
 
         if let Some(db) = save_db {
             let quantum = db.ends_with(".dqb");
@@ -153,12 +168,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     }
 
-    // --- Load from DB using calcbits ---
+    // --- Load from DB using calcbits progress bar ---
     if let (Some(db), Some(t), Some(o)) = (load_db, take_file, out) {
         load_from_db(&db, &t, &o)?;
     }
 
-    // --- Ping ---
+    // --- Ping with calcbits progress bar ---
     if let (Some(c), Some(h)) = (ping_count, ping_host) {
         ping(&h, c)?;
     }

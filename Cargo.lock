@@ -220,9 +220,9 @@ checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "calcbits"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aa0bce3d5226d9e276b01d9dd9829a253923824dd70fdb4b58e65b7d0a9a79e"
+checksum = "39e621cd098802042b61f57dbdaec5c1a487c81589129f766ec449d26f53988b"
 dependencies = [
  "futures-util",
  "indicatif",
