@@ -1,6 +1,6 @@
 [package]
 name = "catch"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 authors = ["Ariel Zvinowanda <taperazvi@gmail.com>"]
 description = "A downloader + pinger with secure DLB/DQB storage"
