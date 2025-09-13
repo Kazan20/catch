@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // --- Downloader + save to DB using calcbits progress bar ---
     if let Some(u) = url {
-    let outfile = out.clone().unwrap_or("output.html".into());
+    let outfile = out.clone().unwrap_or("output.unk".into());
     println!("Downloading {} -> {}", u, outfile);
 
     // Use calcbits' async download with progress
